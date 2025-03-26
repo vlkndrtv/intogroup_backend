@@ -12,7 +12,15 @@ def get_installations_by_widget(id_widget):
     installations = Installation.query.with_entities(Installation.client_domain, Installation.status).filter_by(id_widget=id_widget).all()
     if not installations:
         return jsonify({'error': 'No installations found for this widget.'}), 404
-    results = [{"client_domain": domain, "status": status} for domain, status in installations]
+    results = [{
+                "client_domain": installation.client_domain,
+                "widget_name": installation.widget.name_widget,
+                "paid": installation.widget.paid,
+                "date_install": installation.date_install.isoformat(),
+                "date_expire": installation.date_expire.isoformat(),
+                "trial": installation.trial,
+                "status": installation.status
+            } for installation in installations]
     return jsonify(results), 200
 
 @bp.route('/installations/client_domain/<path:client_domain>', methods=['GET'])
@@ -138,7 +146,11 @@ def update_widget(id_widget):
 
     db.session.commit()
 
-    return jsonify({'message': 'The widget has been updated successfully.'}), 200
+    return jsonify({'id_widget': widget.id_widget,
+                    'name_widget': widget.name_widget,
+                    'paid': widget.paid,
+                    'price': widget.price
+                    }), 200
 
 @bp.route('/widgets/<id_widget>', methods=['DELETE'])
 def delete_widget(id_widget):
@@ -152,13 +164,31 @@ def delete_widget(id_widget):
 
         return jsonify({'message': 'The widget was successfully deleted'}), 200
 
-@bp.route('/users', methods=['GET'])
+@bp.route('/clients_domains', methods=['GET'])
 def get_all_clients_domains():
-        unique_users = Installation.query.with_entities(Installation.client_domain).distinct().all()
+        installations = Installation.query.with_entities(Installation.client_domain).distinct().all()
 
-        if not unique_users:
-            return jsonify({'message': 'No users found.'}), 404
+        if not installations:
+            return jsonify({'message': 'No clients domains found.'}), 404
 
-        users = [user.client_domain for user in unique_users]
+        clients_domains = [{'client_domain': installation.client_domain} for installation in installations]
 
-        return jsonify(users), 200
+        return jsonify(clients_domains), 200
+
+bp.route('/installations', methods=['DELETE'])
+def delete_installation():
+    data = request.get_json()
+    client_domain = data.get('client_domain')
+    id_widget = data.get('id_widget')
+
+    if not client_domain or not id_widget:
+        return jsonify({'error': 'You must specify the client_domain and id_widget.'}), 400
+
+    installation = Installation.query.filter_by(client_domain=client_domain, id_widget=id_widget).first()
+
+    if installation:
+        db.session.delete(installation)
+        db.session.commit()
+        return jsonify({'message': 'Installation deleted successfully'}), 200
+    else:
+        return jsonify({'message': 'Installation not found'}), 404
